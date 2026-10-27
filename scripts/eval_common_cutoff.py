@@ -1,12 +1,16 @@
+
 import sys
+from datetime import date, timedelta
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from datetime import date, timedelta
-import pandas as pd
-import numpy as np
 from backend.app.services.forecast_service import compare
+
 
 start_date = date(2026, 1, 1)
 end_date = date(2026, 1, 31)
