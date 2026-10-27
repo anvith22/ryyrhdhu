@@ -1,0 +1,36 @@
+# Git and IDE
+.git
+.gitignore
+.agents
+.gemini
+.vscode
+.idea
+
+# Python caches and virtualenvs
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node and frontend artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Research and temporary artifacts
+notebooks/
+scripts/build_notebook.py
+data/*.wal
+data/*.shm
+*.tmp
+*.log
