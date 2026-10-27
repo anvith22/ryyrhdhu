@@ -1,3 +1,4 @@
+from __future__ import annotations
 
 import sys
 from datetime import date, timedelta
@@ -6,11 +7,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+# Ensure repository root is on sys.path for direct script execution
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.app.services.forecast_service import compare
-
+from backend.app.services.forecast_service import compare  # noqa: E402
 
 start_date = date(2026, 1, 1)
 end_date = date(2026, 1, 31)

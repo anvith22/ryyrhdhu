@@ -115,3 +115,18 @@ def test_api_out_of_bounds_date_validation():
     response = client.get("/api/actuals", params={"start": "2020-01-01", "end": "2020-01-05"})
     assert response.status_code == 400
     assert "outside available snapshot bounds" in response.json()["detail"]
+
+
+def test_root_endpoint_serves_spa_with_title():
+    """Verify that root / serves index.html with the correct application title when built."""
+    response = client.get("/")
+    assert response.status_code == 200
+    if "text/html" in response.headers.get("content-type", ""):
+        html = response.text.lower()
+        assert "<!doctype html>" in html
+        assert "uk wind generation forecast & evaluation platform" in html
+    else:
+        # Development fallback when dist is not built
+        data = response.json()
+        assert data.get("name") == "UK Wind Generation Forecast & Evaluation API"
+

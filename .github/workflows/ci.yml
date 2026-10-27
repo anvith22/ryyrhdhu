@@ -99,9 +99,9 @@ jobs:
 
       - name: Test frontend root serving
         run: |
-          HTML_OUTPUT=$(curl -s http://127.0.0.1:8080/)
+          HTML_OUTPUT=$(curl -fsS --retry 5 --retry-delay 2 --retry-connrefused http://127.0.0.1:8080/)
           echo "$HTML_OUTPUT" | grep -i "<!doctype html>" || (echo "Root did not serve HTML"; exit 1)
-          echo "$HTML_OUTPUT" | grep -i "UK Wind Generation Forecast" || (echo "Expected title in HTML"; exit 1)
+          echo "$HTML_OUTPUT" | grep -i "UK Wind Generation Forecast & Evaluation Platform" || (echo "Expected title in HTML"; exit 1)
           echo "Frontend HTML verified!"
 
       - name: Output container logs on failure
