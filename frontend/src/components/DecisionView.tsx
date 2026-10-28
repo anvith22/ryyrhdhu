@@ -15,7 +15,11 @@ import {
   Download,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   AlertCircle,
+  AlertTriangle,
+  ShieldCheck,
   FileSpreadsheet,
   TrendingUp,
   Info,
@@ -40,6 +44,13 @@ interface DecisionViewProps {
   onOpenMethodology: () => void;
 }
 
+const PRESET_DAYS = [
+  { label: 'Jan 10 (Storm Ramp)', date: '2026-01-10' },
+  { label: 'Jan 15 (Mid-Month)', date: '2026-01-15' },
+  { label: 'Jan 24 (Severe Over-Fc)', date: '2026-01-24' },
+  { label: 'Jan 28 (Low Wind)', date: '2026-01-28' },
+];
+
 export const DecisionView: React.FC<DecisionViewProps> = ({
   deliveryDate,
   setDeliveryDate,
@@ -53,6 +64,11 @@ export const DecisionView: React.FC<DecisionViewProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isTableExpanded, setIsTableExpanded] = useState<boolean>(false);
+
+  // Chart layer toggles
+  const [showActuals, setShowActuals] = useState<boolean>(true);
+  const [showForecast, setShowForecast] = useState<boolean>(true);
+  const [showBand, setShowBand] = useState<boolean>(true);
 
   useEffect(() => {
     let isCancelled = false;
@@ -137,26 +153,70 @@ export const DecisionView: React.FC<DecisionViewProps> = ({
   }
 
   // Summary figures
-  const meanActual = compareData?.slots.reduce((acc, s) => acc + (s.actual_mw || 0), 0)! / 24;
-  const meanForecast = compareData?.slots.reduce((acc, s) => acc + (s.forecast_mw || 0), 0)! / 24;
+  const meanActual = (compareData?.slots.reduce((acc, s) => acc + (s.actual_mw || 0), 0) ?? 0) / 24;
+  const meanForecast = (compareData?.slots.reduce((acc, s) => acc + (s.forecast_mw || 0), 0) ?? 0) / 24;
   const totalActualMWh = meanActual * 24;
   const totalForecastMWh = meanForecast * 24;
+  const imbalanceMWh = totalForecastMWh - totalActualMWh;
+  const isShort = imbalanceMWh > 0;
+
+  const maxHourlyError = compareData?.slots.reduce((max, s) => {
+    return Math.abs(s.error_mw ?? 0) > Math.abs(max) ? (s.error_mw ?? 0) : max;
+  }, 0) ?? 0;
+
+  // Day navigation helpers
+  const handlePrevDay = () => {
+    const cur = new Date(deliveryDate + 'T00:00:00Z');
+    cur.setUTCDate(cur.getUTCDate() - 1);
+    if (cur >= new Date('2026-01-01T00:00:00Z')) {
+      setDeliveryDate(cur.toISOString().slice(0, 10));
+    }
+  };
+
+  const handleNextDay = () => {
+    const cur = new Date(deliveryDate + 'T00:00:00Z');
+    cur.setUTCDate(cur.getUTCDate() + 1);
+    if (cur <= new Date('2026-01-31T00:00:00Z')) {
+      setDeliveryDate(cur.toISOString().slice(0, 10));
+    }
+  };
+
+  const isMinDate = deliveryDate <= '2026-01-01';
+  const isMaxDate = deliveryDate >= '2026-01-31';
 
   return (
     <div>
-      {/* Controls */}
+      {/* Controls Bar */}
       <div className="control-bar">
         <div className="control-group">
           <Calendar size={18} color="var(--accent-cyan)" />
           <span className="control-label">Delivery Date:</span>
-          <input
-            type="date"
-            className="input-date"
-            min="2026-01-01"
-            max="2026-01-31"
-            value={deliveryDate}
-            onChange={(e) => setDeliveryDate(e.target.value)}
-          />
+          <div className="date-stepper-group">
+            <button
+              className="step-day-btn"
+              onClick={handlePrevDay}
+              disabled={isMinDate}
+              title="Previous Delivery Day"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <input
+              type="date"
+              className="input-date"
+              min="2026-01-01"
+              max="2026-01-31"
+              value={deliveryDate}
+              onChange={(e) => setDeliveryDate(e.target.value)}
+            />
+            <button
+              className="step-day-btn"
+              onClick={handleNextDay}
+              disabled={isMaxDate}
+              title="Next Delivery Day"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
 
         <div className="control-group">
@@ -169,14 +229,28 @@ export const DecisionView: React.FC<DecisionViewProps> = ({
           >
             {Array.from({ length: 24 }).map((_, i) => (
               <option key={i} value={i}>
-                D-1 {String(i).padStart(2, '0')}:00 UTC {i === 9 ? '(Default)' : ''}
+                D-1 {String(i).padStart(2, '0')}:00 UTC {i === 9 ? '(Default Day-Ahead Auction)' : ''}
               </option>
             ))}
           </select>
         </div>
+
+        {/* Case Study Presets Chips */}
+        <div className="presets-container">
+          <span className="presets-label">Case Studies:</span>
+          {PRESET_DAYS.map((preset) => (
+            <button
+              key={preset.date}
+              className={`preset-chip ${deliveryDate === preset.date ? 'active' : ''}`}
+              onClick={() => setDeliveryDate(preset.date)}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Prominent Banner */}
+      {/* Prominent Run Metadata Banner */}
       {compareData && (
         <div className="decision-banner">
           <div>
@@ -217,11 +291,35 @@ export const DecisionView: React.FC<DecisionViewProps> = ({
 
       {!loading && !error && compareData && (
         <>
+          {/* Commercial Trading Physical Position Exposure Card */}
+          <div className={`trading-position-card ${isShort ? 'short' : 'long'}`}>
+            <div className="position-icon-col">
+              {isShort ? (
+                <AlertTriangle size={26} color="var(--accent-rose)" />
+              ) : (
+                <ShieldCheck size={26} color="var(--accent-emerald)" />
+              )}
+            </div>
+            <div className="position-content">
+              <div className="position-badge">
+                {isShort ? 'Physical Trading Risk: Net Short Position' : 'Physical Trading Risk: Net Long Position'}
+              </div>
+              <div className="position-headline">
+                {isShort
+                  ? `Buyer under-procured day-ahead by ${formatMWh(Math.abs(imbalanceMWh))} (${formatMW(Math.abs(meanForecast - meanActual))} avg MW). Residual deficit exposed to volatile Balancing Mechanism System Buy Price (cash-out penalties).`
+                  : `Buyer over-procured day-ahead by ${formatMWh(Math.abs(imbalanceMWh))} (${formatMW(Math.abs(meanForecast - meanActual))} avg MW). Surplus power spilled or liquidated at discounted System Sell Price.`}
+              </div>
+              <div className="position-details">
+                Day Total Procured: <strong>{formatMWh(totalForecastMWh)}</strong> | Metered Outturn: <strong>{formatMWh(totalActualMWh)}</strong> | Peak Hourly Error: <strong>{formatSignedMW(maxHourlyError)}</strong>
+              </div>
+            </div>
+          </div>
+
           {/* Day KPI Summary Cards */}
           <div className="kpi-grid">
             <div className="kpi-card">
               <div className="kpi-header">
-                <span className="kpi-title">Forecast Energy</span>
+                <span className="kpi-title">Forecast Energy (MWh)</span>
               </div>
               <div className="kpi-value">{formatMW(meanForecast)}</div>
               <div className="kpi-subtext">Total: {formatMWh(totalForecastMWh)}</div>
@@ -229,7 +327,7 @@ export const DecisionView: React.FC<DecisionViewProps> = ({
 
             <div className="kpi-card">
               <div className="kpi-header">
-                <span className="kpi-title">Actual Energy</span>
+                <span className="kpi-title">Actual Energy (MWh)</span>
               </div>
               <div className="kpi-value">{formatMW(meanActual)}</div>
               <div className="kpi-subtext">Total: {formatMWh(totalActualMWh)}</div>
@@ -251,7 +349,7 @@ export const DecisionView: React.FC<DecisionViewProps> = ({
               </div>
               <div className="kpi-subtext">
                 {compareData.summary.bias && compareData.summary.bias > 0
-                  ? 'Over-forecast (buyer short in balancing)'
+                  ? 'Over-forecast (buyer short in BM)'
                   : 'Under-forecast (buyer long)'}
               </div>
             </div>
@@ -278,19 +376,32 @@ export const DecisionView: React.FC<DecisionViewProps> = ({
                 </div>
               </div>
 
-              <div className="chart-legend-custom">
-                <div className="legend-item">
-                  <span className="legend-dot" style={{ backgroundColor: '#0284c7' }} />
-                  Actual (30-min FUELHH)
-                </div>
-                <div className="legend-item">
-                  <span className="legend-dot" style={{ backgroundColor: '#f43f5e' }} />
-                  Forecast at Cutoff (WINDFOR)
-                </div>
-                <div className="legend-item">
-                  <span className="legend-dot" style={{ backgroundColor: 'rgba(56, 189, 248, 0.25)' }} />
-                  Plausible Actual Band (P10–P90 in-sample)
-                </div>
+              {/* Interactive Layer Visibility Toggles */}
+              <div className="chart-layer-toggles">
+                <button
+                  className={`layer-toggle-btn ${showActuals ? 'active' : ''}`}
+                  onClick={() => setShowActuals(!showActuals)}
+                  title="Toggle 30-min metered actual line"
+                >
+                  <span className="layer-toggle-dot" style={{ backgroundColor: '#38bdf8' }} />
+                  Actual (30m)
+                </button>
+                <button
+                  className={`layer-toggle-btn ${showForecast ? 'active' : ''}`}
+                  onClick={() => setShowForecast(!showForecast)}
+                  title="Toggle hourly step decision forecast"
+                >
+                  <span className="layer-toggle-dot" style={{ backgroundColor: '#f43f5e' }} />
+                  Decision Forecast
+                </button>
+                <button
+                  className={`layer-toggle-btn ${showBand ? 'active' : ''}`}
+                  onClick={() => setShowBand(!showBand)}
+                  title="Toggle P10-P90 in-sample empirical plausible band"
+                >
+                  <span className="layer-toggle-dot" style={{ backgroundColor: 'rgba(56, 189, 248, 0.4)' }} />
+                  P10–P90 Risk Band
+                </button>
               </div>
             </div>
 
@@ -312,62 +423,109 @@ export const DecisionView: React.FC<DecisionViewProps> = ({
                     tickLine={false}
                   />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'rgba(19, 28, 49, 0.95)',
-                      borderColor: 'var(--border-subtle)',
-                      borderRadius: '8px',
-                      color: '#fff',
-                      fontSize: '0.8rem',
-                      fontFamily: 'var(--font-mono)',
-                    }}
-                    formatter={(val: any, name: string) => {
-                      if (name === 'plausible_band') return [null, null];
-                      if (name === 'plausible_lower') return [null, null];
-                      return [formatMW(val), name];
-                    }}
-                    labelFormatter={(label, items) => {
-                      const item = items?.[0]?.payload;
-                      return `${label} ${item?.publish_time ? `(Pub: ${formatTimeUTC(item.publish_time)})` : ''}`;
+                    content={({ active, payload }: any) => {
+                      if (!active || !payload || !payload.length) return null;
+                      const d = payload[0].payload;
+                      const act = d.actual_mw_30m;
+                      const fc = d.forecast_mw;
+                      const err = act !== null && fc !== null ? fc - act : null;
+                      const errPct = err !== null && act > 0 ? ((err / act) * 100).toFixed(1) : null;
+
+                      return (
+                        <div
+                          style={{
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                            borderRadius: '8px',
+                            padding: '0.75rem 1rem',
+                            color: '#fff',
+                            fontSize: '0.8rem',
+                            fontFamily: 'var(--font-mono)',
+                            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+                            backdropFilter: 'blur(8px)',
+                            minWidth: '220px',
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, marginBottom: '0.4rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.3rem' }}>
+                            {d.time_label} UTC
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', color: '#38bdf8' }}>
+                            <span>Actual (30m):</span>
+                            <strong>{formatMW(act)}</strong>
+                          </div>
+                          {fc !== null && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', color: '#f43f5e' }}>
+                              <span>Decision Fc:</span>
+                              <strong>{formatMW(fc)}</strong>
+                            </div>
+                          )}
+                          {err !== null && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', color: err > 0 ? 'var(--accent-amber)' : 'var(--accent-cyan)' }}>
+                              <span>Error:</span>
+                              <strong>{formatSignedMW(err)} {errPct !== null ? `(${errPct}%)` : ''}</strong>
+                            </div>
+                          )}
+                          {showBand && d.plausible_lower !== undefined && d.plausible_upper !== undefined && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', color: 'var(--text-muted)' }}>
+                              <span>P10–P90 Band:</span>
+                              <span>{formatMW(d.plausible_lower)} – {formatMW(d.plausible_upper)}</span>
+                            </div>
+                          )}
+                          {d.publish_time && (
+                            <div style={{ marginTop: '0.4rem', paddingTop: '0.3rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)', fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                              Run: {formatTimeUTC(d.publish_time)} ({d.horizon_hours?.toFixed(1)}h lead)
+                            </div>
+                          )}
+                        </div>
+                      );
                     }}
                   />
 
-                  {/* Shaded Area for P10-P90 Quantile Band (Stacked transparent base + height) */}
-                  <Area
-                    type="stepAfter"
-                    dataKey="plausible_lower"
-                    stackId="band"
-                    stroke="none"
-                    fill="transparent"
-                  />
-                  <Area
-                    type="stepAfter"
-                    name="Plausible Band (P10-P90)"
-                    dataKey="plausible_band"
-                    stackId="band"
-                    stroke="rgba(56, 189, 248, 0.4)"
-                    strokeDasharray="2 2"
-                    fill="rgba(56, 189, 248, 0.15)"
-                  />
+                  {/* Shaded Area for P10-P90 Quantile Band */}
+                  {showBand && (
+                    <>
+                      <Area
+                        type="stepAfter"
+                        dataKey="plausible_lower"
+                        stackId="band"
+                        stroke="none"
+                        fill="transparent"
+                      />
+                      <Area
+                        type="stepAfter"
+                        name="Plausible Band (P10-P90)"
+                        dataKey="plausible_band"
+                        stackId="band"
+                        stroke="rgba(56, 189, 248, 0.4)"
+                        strokeDasharray="2 2"
+                        fill="rgba(56, 189, 248, 0.15)"
+                      />
+                    </>
+                  )}
 
                   {/* Hourly Step Forecast Line */}
-                  <Line
-                    type="stepAfter"
-                    name="Forecast MW"
-                    dataKey="forecast_mw"
-                    stroke="#f43f5e"
-                    strokeWidth={2.5}
-                    dot={{ r: 3, fill: '#f43f5e' }}
-                  />
+                  {showForecast && (
+                    <Line
+                      type="stepAfter"
+                      name="Forecast MW"
+                      dataKey="forecast_mw"
+                      stroke="#f43f5e"
+                      strokeWidth={2.5}
+                      dot={{ r: 3, fill: '#f43f5e' }}
+                    />
+                  )}
 
                   {/* 30-Minute Actual Generation Line */}
-                  <Line
-                    type="monotone"
-                    name="Actual MW (30m)"
-                    dataKey="actual_mw_30m"
-                    stroke="#38bdf8"
-                    strokeWidth={2}
-                    dot={false}
-                  />
+                  {showActuals && (
+                    <Line
+                      type="monotone"
+                      name="Actual MW (30m)"
+                      dataKey="actual_mw_30m"
+                      stroke="#38bdf8"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  )}
                 </ComposedChart>
               </ResponsiveContainer>
             </div>

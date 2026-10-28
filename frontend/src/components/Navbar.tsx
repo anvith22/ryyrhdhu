@@ -52,7 +52,12 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onSelectTab, onOpenMe
           </button>
         </nav>
 
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div className="live-pulse-container" title="Connected to Elexon BMRS January 2026 Snapshot">
+            <span className="live-pulse-dot" />
+            <span>UTC ONLINE</span>
+          </div>
+
           <button className="methodology-btn" onClick={onOpenMethodology}>
             <HelpCircle size={15} />
             About Data & Methodology
