@@ -38,17 +38,29 @@ app.add_middleware(
 # Mount all /api routes first so they take strict priority over static files
 app.include_router(api_router)
 
-# Resolve path to frontend distribution artifacts
-FRONTEND_DIST_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
-if not FRONTEND_DIST_DIR.exists():
-    FRONTEND_DIST_DIR = Path("/app/frontend/dist")
-if not FRONTEND_DIST_DIR.exists():
-    FRONTEND_DIST_DIR = Path("frontend/dist").resolve()
+def get_frontend_dist_dir() -> Path | None:
+    """Find frontend/dist directory if it exists and contains index.html."""
+    candidates = [
+        Path(__file__).resolve().parents[2] / "frontend" / "dist",
+        (Path.cwd() / "frontend" / "dist"),
+        Path("/app/frontend/dist"),
+    ]
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+            if resolved.is_dir() and (resolved / "index.html").is_file():
+                return resolved
+        except (OSError, RuntimeError):
+            continue
+    return None
 
-if FRONTEND_DIST_DIR.exists() and (FRONTEND_DIST_DIR / "index.html").exists():
+
+FRONTEND_DIST_DIR = get_frontend_dist_dir()
+
+if FRONTEND_DIST_DIR is not None:
     # Mount assets folder if present
     assets_dir = FRONTEND_DIST_DIR / "assets"
-    if assets_dir.exists():
+    if assets_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
     @app.get("/{full_path:path}")

@@ -2,22 +2,28 @@
 
 An end-to-end analytical and web platform designed for a UK energy utility's power trading desk. The platform evaluates National Grid ESO wind generation forecasts (`WINDFOR`) against actual metered outturns (`FUELHH` WIND) to quantify forecast error and timing risk for day-ahead electricity procurement.
 
-Deployed app: `<URL>` *(e.g., https://your-app-name.herokuapp.com)*
+- **Live Production Demo:** Deployed on **Vercel** (Hobby plan) at `<URL>` *(e.g., https://uk-wind-evaluator.vercel.app)*
+- **Local Runs:** Docker multi-stage container (`Dockerfile`) and local development server.
+- **Alternative Cloud Container:** Heroku Container Stack manifest (`heroku.yml`).
 
 ---
 
 ## Table of Contents
 1. [Project Overview](#project-overview)
 2. [Directory Structure](#directory-structure)
-3. [How to Start](#how-to-start)
-   - [Option A: Run with Docker (Recommended)](#option-a-run-with-docker-recommended)
+3. [Vercel Deployment Guide (Live Production Demo)](#vercel-deployment-guide-live-production-demo)
+   - [Option 1: Deploy with Vercel Git Integration (Recommended)](#option-1-deploy-with-vercel-git-integration-recommended)
+   - [Option 2: Deploy with Vercel CLI](#option-2-deploy-with-vercel-cli)
+   - [Vercel Architecture & Zero-Config Runtimes](#vercel-architecture--zero-config-runtimes)
+4. [How to Run Locally](#how-to-run-locally)
+   - [Option A: Run with Docker (Local Container)](#option-a-run-with-docker-local-container)
    - [Option B: Local Development (Backend + Frontend)](#option-b-local-development-backend--frontend)
-4. [Data Ingestion & Refresh](#data-ingestion--refresh)
-5. [API Endpoint Summary](#api-endpoint-summary)
-6. [Key Assumptions & Limitations](#key-assumptions--limitations)
-7. [Heroku Container Deployment Guide](#heroku-container-deployment-guide)
-8. [Automated Testing & CI](#automated-testing--ci)
-9. [AI Tools Used](#ai-tools-used)
+5. [Data Ingestion & Refresh](#data-ingestion--refresh)
+6. [API Endpoint Summary](#api-endpoint-summary)
+7. [Key Assumptions & Limitations](#key-assumptions--limitations)
+8. [Heroku Container Deployment Guide (Alternative)](#heroku-container-deployment-guide-alternative)
+9. [Automated Testing & CI](#automated-testing--ci)
+10. [AI Tools Used](#ai-tools-used)
 
 ---
 
@@ -48,12 +54,16 @@ energy_/
 │       └── ci.yml                  # GitHub Actions CI (Ruff, Pytest, Vitest, npm run build)
 ├── .dockerignore                   # Excludes dev files, node_modules, caches, and test artifacts
 ├── .gitignore                      # Git ignore rules (SQLite db data/wind_energy.db is tracked)
-├── Dockerfile                      # Multi-stage container (Node 20 build + Python 3.11-slim runtime)
-├── heroku.yml                      # Heroku Container Stack manifest
+├── Dockerfile                      # Multi-stage container for local runs (Node 20 build + Python 3.11-slim)
+├── heroku.yml                      # Heroku Container Stack manifest (alternative container host)
 ├── pyproject.toml                  # Python package metadata, ruff linter, and pytest configuration
+├── vercel.json                     # Vercel project config (Vite static build, Python function, rewrites)
+├── requirements.txt                # Vercel production Python function dependencies (FastAPI, Pandas, etc.)
 ├── README.md                       # Complete platform documentation and operational guide
+├── api/
+│   └── index.py                    # Vercel Serverless Function entrypoint exporting the FastAPI app
 ├── backend/
-│   ├── requirements.txt            # Production Python dependencies (FastAPI, Uvicorn, Pandas, etc.)
+│   ├── requirements.txt            # Local/Docker Python dependencies
 │   ├── app/
 │   │   ├── __init__.py
 │   │   ├── main.py                 # FastAPI application, static frontend SPA mount, and CORS setup
@@ -106,14 +116,79 @@ energy_/
 │   └── 01_explore.ipynb            # Jupyter notebook analyzing dataset dimensions, horizons, and ramps
 └── scripts/
     ├── run_ingest.py               # CLI entrypoint to fetch fresh data from Elexon BMRS
-    └── build_notebook.py           # Automated builder and runner for the exploration notebook
+    ├── build_notebook.py           # Automated builder and runner for the exploration notebook
+    └── verify_metrics.py           # Verification script for benchmark metrics calculation
 ```
 
 ---
 
-## How to Start
+## Vercel Deployment Guide (Live Production Demo)
 
-### Option A: Run with Docker (Recommended)
+The live production application runs on **Vercel** under the **Hobby (Free)** plan with zero hosting fees. Docker (`Dockerfile`) and Heroku (`heroku.yml`) are preserved for local development and containerized environments.
+
+### Option 1: Deploy with Vercel Git Integration (Recommended)
+
+1. Push your repository to GitHub, GitLab, or Bitbucket:
+   ```bash
+   git add .
+   git commit -m "feat: port deployment to Vercel"
+   git push origin main
+   ```
+2. Navigate to [vercel.com/new](https://vercel.com/new) and log in.
+3. Import your `energy_` repository.
+4. Vercel automatically detects `vercel.json`. Leave the Project Settings at defaults:
+   - **Framework Preset:** Other
+   - **Root Directory:** `./`
+   - **Build Command:** `cd frontend && npm install && npm run build` (configured automatically via `vercel.json`)
+   - **Output Directory:** `frontend/dist` (configured automatically via `vercel.json`)
+5. Click **Deploy**. Vercel will install dependencies, build the React SPA, package the Python serverless function, and assign a production URL (e.g., `https://<your-project>.vercel.app`).
+
+---
+
+### Option 2: Deploy with Vercel CLI
+
+If you prefer deploying from your terminal without connecting Git:
+
+1. Install the Vercel CLI globally:
+   ```bash
+   npm install -g vercel
+   ```
+2. Log in to your Vercel account:
+   ```bash
+   vercel login
+   ```
+3. Deploy preview build:
+   ```bash
+   vercel
+   ```
+   *Respond to the interactive prompts:*
+   - Set up and deploy? **Y**
+   - Which scope? *(select your personal account)*
+   - Link to existing project? **N**
+   - What's your project's name? **uk-wind-evaluator**
+   - In which directory is your code located? **./**
+   - Want to modify settings? **N** (Vercel reads `vercel.json`)
+4. Deploy directly to production:
+   ```bash
+   vercel --prod
+   ```
+
+---
+
+### Vercel Architecture & Zero-Config Runtimes
+
+| Component | Host / Runtime | Configuration |
+| :--- | :--- | :--- |
+| **Frontend SPA** | Vercel Edge Network (Static CDN) | Built via `cd frontend && npm run build` -> `frontend/dist`. Single-Page App rewrites direct non-API paths (`/(.*)`) to `/index.html`. |
+| **Backend API** | Vercel Python Runtime (`python3.12`) | Entrypoint `api/index.py` exposes the FastAPI ASGI `app`. `/api/(.*)` routes to `api/index.py`. |
+| **Database** | SQLite Read-Only Snapshot | `data/wind_energy.db` (5.8 MB) is bundled into the function via `includeFiles` in `vercel.json` and opened with `uri=True` using `file:...mode=ro`. No `/tmp` storage or write permissions needed. |
+| **Bundle Size** | Serverless Function (< 500 MB limit) | Root `requirements.txt` installs only lean runtime dependencies (`fastapi`, `uvicorn`, `pydantic`, `pandas`, `requests`). Development packages (`matplotlib`, `ipykernel`) are excluded, keeping the total uncompressed package size under 80 MB. |
+
+---
+
+## How to Run Locally
+
+### Option A: Run with Docker (Local Container)
 
 The project includes a multi-stage `Dockerfile` that compiles the React frontend into static assets and packages the FastAPI backend, pre-populated SQLite database, and Uvicorn runtime into a self-contained image running as a secure non-root user.
 
@@ -257,9 +332,9 @@ All timestamps, query parameters, and database operations execute strictly in **
 
 ---
 
-## Heroku Container Deployment Guide
+## Heroku Container Deployment Guide (Alternative)
 
-The application is fully container-ready using Heroku's Docker Container Stack via `heroku.yml`.
+The application is also container-ready for Heroku using Heroku's Docker Container Stack via `heroku.yml`.
 
 ### Step-by-Step Deployment Instructions
 

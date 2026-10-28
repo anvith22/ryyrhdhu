@@ -130,3 +130,15 @@ def test_root_endpoint_serves_spa_with_title():
         data = response.json()
         assert data.get("name") == "UK Wind Generation Forecast & Evaluation API"
 
+
+def test_missing_frontend_dist_does_not_crash(monkeypatch):
+    """Verify that get_frontend_dist_dir and root route gracefully handle missing dist folder."""
+    import unittest.mock as mock
+
+    from backend.app.main import get_frontend_dist_dir
+
+    with mock.patch("pathlib.Path.is_dir", return_value=False):
+        dist = get_frontend_dist_dir()
+        assert dist is None
+
+

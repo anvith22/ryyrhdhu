@@ -8,6 +8,7 @@ storage in Python's standard library and enables indexed relational queries
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 from pathlib import Path
 
@@ -15,7 +16,32 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DB_PATH = Path(__file__).resolve().parents[3] / "data" / "wind_energy.db"
+
+def resolve_db_path(custom_path: Path | str | None = None) -> Path:
+    """Resolve SQLite database path across local dev, Docker container, and Vercel serverless."""
+    if custom_path is not None:
+        return Path(custom_path).resolve()
+
+    # 1. Environment variable override
+    env_path = os.environ.get("DB_PATH")
+    if env_path and Path(env_path).exists():
+        return Path(env_path).resolve()
+
+    # 2. Path relative to storage.py (parents[3] is repository root)
+    rel_file = (Path(__file__).resolve().parents[3] / "data" / "wind_energy.db").resolve()
+    if rel_file.exists():
+        return rel_file
+
+    # 3. Path relative to current working directory (Vercel runtime root /var/task)
+    cwd_path = (Path.cwd() / "data" / "wind_energy.db").resolve()
+    if cwd_path.exists():
+        return cwd_path
+
+    # Fallback default
+    return rel_file
+
+
+DEFAULT_DB_PATH = resolve_db_path()
 
 
 def get_sqlite_connection(
@@ -27,7 +53,14 @@ def get_sqlite_connection(
     When read_only is True, opens using SQLite URI mode=ro so that it operates safely
     even on read-only container filesystems.
     """
-    path = Path(db_path).resolve()
+    path = resolve_db_path(db_path)
+    if read_only and not path.exists():
+        raise FileNotFoundError(
+            f"SQLite database file not found at '{path}'. "
+            f"Searched: file_rel='{Path(__file__).resolve().parents[3] / 'data' / 'wind_energy.db'}', "
+            f"cwd_rel='{Path.cwd() / 'data' / 'wind_energy.db'}'"
+        )
+
     if read_only:
         uri = f"file:{path.as_posix()}?mode=ro"
         conn = sqlite3.connect(uri, uri=True)
