@@ -24,6 +24,12 @@ dev = [
     "ipykernel>=6.29.0",
 ]
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*", "api*"]
+exclude = ["frontend*", "notebooks*", "scripts*", "docs*", "data*"]
+
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
